@@ -2,14 +2,14 @@ import Link from "next/link";
 import {
   Zap,
   Calendar,
-  Image,
+  ImageIcon,
   CheckCircle2,
   ArrowRight,
   Clock,
   Users,
   Sparkles,
   Shield,
-  Instagram,
+  Camera,
 } from "lucide-react";
 
 const FEATURES = [
@@ -19,7 +19,7 @@ const FEATURES = [
     desc: "Generate a full month of content in 60 seconds. Topics, captions, hashtags — all branded to your client.",
   },
   {
-    icon: Image,
+    icon: ImageIcon,
     title: "Auto Image Generation",
     desc: "AI creates on-brand images for every post. Your client's colors, style, and vibe — automatically.",
   },
@@ -29,7 +29,7 @@ const FEATURES = [
     desc: "Nothing posts without your approval. Review, edit, regenerate — you stay in control.",
   },
   {
-    icon: Instagram,
+    icon: Camera,
     title: "Auto-Post to Instagram",
     desc: "Approved posts go live at the scheduled time. No manual posting. No forgotten uploads.",
   },
@@ -130,7 +130,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-6 flex items-center justify-center gap-10 flex-wrap text-sm text-muted-fg font-medium">
           <span className="flex items-center gap-2"><Shield className="w-4 h-4" /> Razorpay Secured</span>
           <span className="flex items-center gap-2"><Clock className="w-4 h-4" /> 2-min Setup</span>
-          <span className="flex items-center gap-2"><Instagram className="w-4 h-4" /> Instagram Auto-Post</span>
+          <span className="flex items-center gap-2"><Camera className="w-4 h-4" /> Instagram Auto-Post</span>
           <span className="flex items-center gap-2"><Sparkles className="w-4 h-4" /> AI-Powered</span>
         </div>
       </div>
