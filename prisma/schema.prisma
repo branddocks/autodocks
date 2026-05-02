@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════
+// AUTH MODELS (NextAuth compatible)
+// ═══════════════════════════════════════
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ═══════════════════════════════════════
+// CORE MODELS
+// ═══════════════════════════════════════
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+
+  accounts Account[]
+  sessions Session[]
+  agency   Agency?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Agency {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  logo            String?
+  plan            Plan      @default(STARTER)
+  razorpaySubId   String?
+  razorpayCustomerId String?
+  subStatus       SubStatus @default(TRIAL)
+  trialEndsAt     DateTime?
+
+  clients         Client[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Client {
+  id              String    @id @default(cuid())
+  agencyId        String
+  agency          Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  // Brand profile
+  businessName    String
+  niche           String
+  brandColors     Json      @default("[\"#E8720C\", \"#1A1A1A\", \"#FFFFFF\"]")
+  toneOfVoice     String    @default("professional")
+  targetAudience  String
+  contentLanguage String    @default("hinglish")
+  contentPillars  Json      @default("[\"tips\", \"behind-the-scenes\", \"motivation\"]")
+  competitors     Json?
+  logoUrl         String?
+  extraContext    String?   @db.Text
+
+  // Instagram connection
+  igUserId        String?
+  igUsername       String?
+  igAccessToken   String?   @db.Text
+  igTokenExpiry   DateTime?
+  fbPageId        String?
+
+  isActive        Boolean   @default(true)
+
+  posts           Post[]
+  calendars       Calendar[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Calendar {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  month           Int
+  year            Int
+  postsPerWeek    Int       @default(5)
+  contentMix      Json      @default("{\"educational\": 40, \"promotional\": 20, \"engagement\": 25, \"festive\": 15}")
+  totalPosts      Int       @default(0)
+
+  posts           Post[]
+
+  generatedAt     DateTime  @default(now())
+
+  @@unique([clientId, month, year])
+}
+
+model Post {
+  id              String     @id @default(cuid())
+  clientId        String
+  client          Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  calendarId      String?
+  calendar        Calendar?  @relation(fields: [calendarId], references: [id], onDelete: SetNull)
+
+  // Content
+  caption         String     @db.Text
+  hashtags        Json       @default("[]")
+  postType        PostType   @default(SINGLE_IMAGE)
+  contentPillar   String?
+  topic           String?
+  imageUrl        String?
+  imagePrompt     String?    @db.Text
+
+  // Scheduling
+  scheduledAt     DateTime?
+  bestTime        String?
+  publishedAt     DateTime?
+  igPostId        String?
+
+  // Status
+  status          PostStatus @default(DRAFT)
+  failureReason   String?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([clientId, status])
+  @@index([status, scheduledAt])
+}
+
+// ═══════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════
+
+enum Plan {
+  STARTER
+  PRO
+}
+
+enum SubStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum PostType {
+  SINGLE_IMAGE
+  CAROUSEL
+  STORY
+  TEXT_ONLY
+}
+
+enum PostStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  POSTING
+  POSTED
+  FAILED
+  REJECTED
+}
