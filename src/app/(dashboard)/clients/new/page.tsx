@@ -11,7 +11,7 @@ import {
   Target,
   Hash,
   Globe,
-  Instagram,
+  Camera,
   Plus,
   X,
   Loader2,
@@ -285,7 +285,7 @@ export default function AddClientPage() {
         <section className="bg-surface border border-[var(--color-border)] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center">
-              <Instagram className="w-4 h-4 text-brand" />
+              <Camera className="w-4 h-4 text-brand" />
             </div>
             <div>
               <h2 className="font-display font-bold text-sm">Competitor Handles (optional)</h2>
