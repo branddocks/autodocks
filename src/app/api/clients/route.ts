@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/utils";
 
-// GET — list all clients for the agency
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -33,7 +31,6 @@ export async function GET() {
   }
 }
 
-// POST — create a new client
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -50,47 +47,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Agency not found" }, { status: 404 });
     }
 
-    // Check plan limits
-    const limit = agency.plan === "PRO" ? 10 : 3;
-    if (agency.clients.length >= limit) {
+    const maxClients = agency.plan === "PRO" ? 10 : 3;
+    if (agency.clients.length >= maxClients) {
       return NextResponse.json(
-        { error: `Plan limit reached. Upgrade to add more clients. (${limit} max)` },
+        { error: "Plan limit reached. Upgrade to add more clients." },
         { status: 403 }
       );
     }
 
     const body = await req.json();
-    const {
-      businessName,
-      niche,
-      brandColors,
-      toneOfVoice,
-      targetAudience,
-      contentLanguage,
-      contentPillars,
-      competitors,
-      extraContext,
-    } = body;
-
-    if (!businessName || !niche || !targetAudience) {
-      return NextResponse.json(
-        { error: "Business name, niche, and target audience are required" },
-        { status: 400 }
-      );
-    }
 
     const client = await prisma.client.create({
       data: {
         agencyId: agency.id,
-        businessName,
-        niche,
-        brandColors: brandColors || ["#D4764E", "#1A1A1A", "#FFFFFF"],
-        toneOfVoice: toneOfVoice || "professional",
-        targetAudience,
-        contentLanguage: contentLanguage || "hinglish",
-        contentPillars: contentPillars || [],
-        competitors: competitors || [],
-        extraContext: extraContext || null,
+        businessName: body.businessName,
+        niche: body.niche,
+        brandColors: body.brandColors || ["#D4764E", "#1A1A1A", "#FFFFFF"],
+        toneOfVoice: body.toneOfVoice || "professional",
+        targetAudience: body.targetAudience,
+        contentLanguage: body.contentLanguage || "hinglish",
+        contentPillars: body.contentPillars || [],
+        competitors: body.competitors || [],
+        extraContext: body.extraContext || null,
       },
     });
 
