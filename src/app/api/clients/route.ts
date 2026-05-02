@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     // Check plan limits
-    const limit = PLAN_LIMITS[agency.plan as keyof typeof PLAN_LIMITS].clients;
+    const limit = agency.plan === "PRO" ? 10 : 3;
     if (agency.clients.length >= limit) {
       return NextResponse.json(
         { error: `Plan limit reached. Upgrade to add more clients. (${limit} max)` },
