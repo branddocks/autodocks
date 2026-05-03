@@ -43,6 +43,7 @@ const NICHE_SUGGESTIONS = [
 export default function AddClientPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [pillarInput, setPillarInput] = useState("");
   const [competitorInput, setCompetitorInput] = useState("");
 
@@ -91,6 +92,17 @@ export default function AddClientPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
+    if (!form.niche.trim()) {
+      setError("Please select or enter an industry/niche.");
+      return;
+    }
+    if (form.contentPillars.length < 1) {
+      setError("Add at least 1 content pillar so the AI knows what to write about.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -100,10 +112,17 @@ export default function AddClientPage() {
         body: JSON.stringify(form),
       });
 
-      if (res.ok) {
-        router.push("/clients");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        setLoading(false);
+        return;
       }
+
+      router.push("/clients");
     } catch {
+      setError("Network error. Please check your connection and try again.");
       setLoading(false);
     }
   };
@@ -329,6 +348,13 @@ export default function AddClientPage() {
             placeholder="e.g., Never mention competitor names. Always include a call to action. Post timings should be 7-9 PM IST."
             rows={4} className="w-full bg-[var(--background)] border border-border-strong rounded-xl px-4 py-3 text-sm placeholder:text-muted-fg focus:border-brand focus:ring-1 focus:ring-brand outline-none resize-none" />
         </section>
+
+        {/* ═══ ERROR ═══ */}
+        {error && (
+          <div className="bg-danger-bg border border-danger/20 text-danger text-sm px-4 py-3 rounded-xl">
+            {error}
+          </div>
+        )}
 
         {/* ═══ SUBMIT ═══ */}
         <div className="flex items-center gap-4">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Zap,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import {
   LogOut,
   ChevronRight,
   Plus,
+  Clock,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -24,12 +26,79 @@ const NAV_ITEMS = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
+function TrialBadge({
+  trialEndsAt,
+  plan,
+  subStatus,
+}: {
+  trialEndsAt?: string | null;
+  plan?: string;
+  subStatus?: string;
+}) {
+  if (subStatus === "ACTIVE") {
+    return (
+      <div className="bg-brand-50 border border-brand-100 rounded-xl p-3 mb-3">
+        <p className="text-xs font-semibold text-brand mb-0.5">
+          {plan === "PRO" ? "Pro Plan" : "Starter Plan"}
+        </p>
+        <p className="text-xs text-muted">
+          {plan === "PRO" ? "10 clients · 300 posts/mo" : "3 clients · 90 posts/mo"}
+        </p>
+        <Link
+          href="/settings"
+          className="text-xs font-semibold text-brand hover:underline mt-2 inline-block"
+        >
+          {plan === "PRO" ? "Manage plan →" : "Upgrade to Pro →"}
+        </Link>
+      </div>
+    );
+  }
+
+  // Trial state
+  const daysLeft = trialEndsAt
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        )
+      )
+    : 7;
+
+  return (
+    <div className="bg-brand-50 border border-brand-100 rounded-xl p-3 mb-3">
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <Clock className="w-3 h-3 text-brand" />
+        <p className="text-xs font-semibold text-brand">
+          {daysLeft} day{daysLeft !== 1 ? "s" : ""} left in trial
+        </p>
+      </div>
+      <p className="text-xs text-muted">3 clients · 90 posts/mo</p>
+      <Link
+        href="/settings"
+        className="text-xs font-semibold text-brand hover:underline mt-2 inline-block"
+      >
+        Upgrade now →
+      </Link>
+    </div>
+  );
+}
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const firstName = session?.user?.name?.split(" ")[0] ?? "Agency";
+  const agencyName = session?.user?.agencyName ?? "My Agency";
+  const initials = agencyName
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div className="min-h-screen bg-[var(--background)] flex">
@@ -93,16 +162,32 @@ export default function DashboardLayout({
 
         {/* Footer */}
         <div className="border-t border-[var(--color-border)] p-4">
-          <div className="bg-brand-50 border border-brand-100 rounded-xl p-3 mb-3">
-            <p className="text-xs font-semibold text-brand mb-0.5">Starter Plan</p>
-            <p className="text-xs text-muted">3 clients · 90 posts/mo</p>
-            <Link
-              href="/settings"
-              className="text-xs font-semibold text-brand hover:underline mt-2 inline-block"
-            >
-              Upgrade to Pro →
-            </Link>
+          <TrialBadge
+            trialEndsAt={session?.user?.trialEndsAt}
+            plan={session?.user?.plan}
+            subStatus={session?.user?.subStatus}
+          />
+
+          {/* User info */}
+          <div className="flex items-center gap-3 px-3 py-2 mb-1 rounded-xl">
+            <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
+              {session?.user?.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={session.user.image}
+                  alt={firstName}
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-bold text-white">{initials}</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{firstName}</p>
+              <p className="text-xs text-muted-fg truncate">{agencyName}</p>
+            </div>
           </div>
+
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-surface-warm hover:text-foreground transition-all w-full"
