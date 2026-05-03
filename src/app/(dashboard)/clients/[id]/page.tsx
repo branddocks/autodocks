@@ -9,7 +9,7 @@ import {
   FileText,
   CheckCircle2,
   Clock,
-  Instagram,
+  Share2,
   Sparkles,
 } from "lucide-react";
 import { ClientEditForm } from "./ClientEditForm";
@@ -98,7 +98,7 @@ export default async function ClientDetailPage({
               </h1>
               {client.igUsername && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-success bg-success-bg px-2 py-0.5 rounded-full">
-                  <Instagram className="w-3 h-3" />
+                  <Share2 className="w-3 h-3" />
                   @{client.igUsername}
                 </span>
               )}
