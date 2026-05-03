@@ -10,7 +10,7 @@ import {
   ArrowRight,
   Calendar,
   FileText,
-  Instagram,
+  Share2,
 } from "lucide-react";
 
 async function getClients(userId: string) {
@@ -170,7 +170,7 @@ export default async function ClientsPage() {
                     <p className="text-xs text-muted">{client.niche}</p>
                   </div>
                   {client.igUsername && (
-                    <Instagram className="w-4 h-4 text-success flex-shrink-0" />
+                    <Share2 className="w-4 h-4 text-success flex-shrink-0" />
                   )}
                 </div>
 
