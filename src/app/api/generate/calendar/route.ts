@@ -160,7 +160,9 @@ export async function POST(req: Request) {
     });
 
     const weeksInMonth = Math.ceil(countWorkingDays(year, month) / 6);
-    const totalPosts = postsPerWeek * weeksInMonth;
+    // Cap at 20 posts per generation to stay within Gemini's 8192 output token limit.
+    // Large months at 7/week would otherwise overflow the response window.
+    const totalPosts = Math.min(postsPerWeek * weeksInMonth, 20);
 
     if (existingPostCount + totalPosts > maxPostsPerMonth) {
       return NextResponse.json(
@@ -204,11 +206,17 @@ export async function POST(req: Request) {
         userPrompt,
       });
     } catch (err) {
-      console.error("Gemini generation error:", err);
-      return NextResponse.json(
-        { error: "AI generation failed. Please try again." },
-        { status: 500 }
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Gemini generation error:", message);
+      // Surface Gemini-specific errors to the client for easier debugging
+      const clientMsg = message.includes("GOOGLE_API_KEY")
+        ? "GOOGLE_API_KEY is not configured. Add it to your Vercel environment variables and redeploy."
+        : message.includes("API_KEY_INVALID") || message.includes("403")
+        ? "Invalid GOOGLE_API_KEY. Check the key in your Vercel environment variables."
+        : message.includes("QUOTA") || message.includes("429")
+        ? "Gemini API quota exceeded. Try again in a few minutes."
+        : `AI generation failed: ${message.slice(0, 200)}`;
+      return NextResponse.json({ error: clientMsg }, { status: 500 });
     }
 
     if (!generatedPosts || generatedPosts.length === 0) {

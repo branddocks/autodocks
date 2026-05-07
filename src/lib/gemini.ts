@@ -72,7 +72,7 @@ export async function generateCalendarContent(prompt: {
 }): Promise<GeneratedPost[]> {
   const raw = await callGemini(prompt.systemPrompt, prompt.userPrompt, {
     temperature: 0.85,
-    maxOutputTokens: 16384,
+    maxOutputTokens: 8192, // gemini-2.0-flash hard limit
     jsonMode: true,
   });
 
