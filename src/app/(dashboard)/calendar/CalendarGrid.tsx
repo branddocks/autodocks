@@ -11,6 +11,9 @@ import {
   Type,
   LayoutGrid,
   BookOpen,
+  Pencil,
+  Save,
+  Loader2,
 } from "lucide-react";
 
 export interface GeneratedPostData {
@@ -89,6 +92,13 @@ export function CalendarGrid({
   );
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Inline editing state
+  const [editMode, setEditMode] = useState(false);
+  const [editCaption, setEditCaption] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [savedData, setSavedData] = useState<Record<string, { caption: string; hashtags: string[] }>>({});
+
   const cells = buildMonthGrid(year, month);
 
   // Build a map: day number → posts
@@ -124,6 +134,37 @@ export function CalendarGrid({
       }
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const openEdit = (post: GeneratedPostData) => {
+    const current = savedData[post.id];
+    setEditCaption(current?.caption ?? post.caption);
+    setEditHashtags((current?.hashtags ?? (post.hashtags as string[]) ?? []).join(" "));
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => setEditMode(false);
+
+  const saveEdit = async (postId: string) => {
+    setSaveLoading(true);
+    try {
+      const hashtags = editHashtags
+        .split(/[\s,]+/)
+        .map((t) => t.trim().replace(/^#/, ""))
+        .filter(Boolean)
+        .map((t) => `#${t}`);
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption: editCaption, hashtags }),
+      });
+      if (res.ok) {
+        setSavedData((prev) => ({ ...prev, [postId]: { caption: editCaption, hashtags } }));
+        setEditMode(false);
+      }
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -204,7 +245,7 @@ export function CalendarGrid({
                         return (
                           <button
                             key={post.id}
-                            onClick={() => setSelectedPost(post)}
+                            onClick={() => { setSelectedPost(post); setEditMode(false); }}
                             className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium truncate transition-all hover:opacity-80 border ${
                               isApproved
                                 ? "bg-success-bg border-success/20 text-success"
@@ -253,7 +294,7 @@ export function CalendarGrid({
       {selectedPost && (
         <div
           className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setSelectedPost(null)}
+          onClick={() => { setSelectedPost(null); setEditMode(false); }}
         >
           <div
             className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl border border-[var(--color-border)]"
@@ -296,7 +337,7 @@ export function CalendarGrid({
                 </p>
               </div>
               <button
-                onClick={() => setSelectedPost(null)}
+                onClick={() => { setSelectedPost(null); setEditMode(false); }}
                 className="text-muted hover:text-foreground transition-colors ml-3 flex-shrink-0"
               >
                 <X className="w-5 h-5" />
@@ -316,22 +357,49 @@ export function CalendarGrid({
 
               {/* Caption */}
               <div>
-                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">
-                  Caption
-                </p>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap bg-surface-warm rounded-xl p-3 border border-border-strong">
-                  {selectedPost.caption}
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-muted uppercase tracking-wider">
+                    Caption
+                  </p>
+                  {!editMode && (
+                    <button
+                      onClick={() => openEdit(selectedPost)}
+                      className="flex items-center gap-1 text-xs text-brand hover:text-brand-deep font-medium transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                  )}
+                </div>
+                {editMode ? (
+                  <textarea
+                    value={editCaption}
+                    onChange={(e) => setEditCaption(e.target.value)}
+                    rows={6}
+                    className="w-full text-sm leading-relaxed bg-surface-warm rounded-xl p-3 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+                  />
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap bg-surface-warm rounded-xl p-3 border border-border-strong">
+                    {savedData[selectedPost.id]?.caption ?? selectedPost.caption}
+                  </p>
+                )}
               </div>
 
               {/* Hashtags */}
-              {selectedPost.hashtags && (selectedPost.hashtags as string[]).length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1">
-                    <Hash className="w-3 h-3" /> Hashtags
-                  </p>
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Hash className="w-3 h-3" /> Hashtags
+                </p>
+                {editMode ? (
+                  <input
+                    type="text"
+                    value={editHashtags}
+                    onChange={(e) => setEditHashtags(e.target.value)}
+                    placeholder="#tag1 #tag2 #tag3"
+                    className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  />
+                ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    {(selectedPost.hashtags as string[]).map((tag, i) => (
+                    {((savedData[selectedPost.id]?.hashtags ?? selectedPost.hashtags) as string[] ?? []).map((tag, i) => (
                       <span
                         key={i}
                         className="text-xs bg-brand-50 border border-brand-100 text-brand px-2 py-0.5 rounded-lg"
@@ -340,8 +408,8 @@ export function CalendarGrid({
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Image direction */}
               {selectedPost.imageDirection && (
@@ -365,34 +433,61 @@ export function CalendarGrid({
             </div>
 
             {/* Actions */}
-            {(postStatuses[selectedPost.id] ?? selectedPost.status) === "DRAFT" && (
+            {editMode ? (
               <div className="flex gap-3 p-5 pt-0">
                 <button
-                  onClick={() => handleAction(selectedPost.id, "REJECTED")}
-                  disabled={!!actionLoading}
-                  className="flex-1 flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+                  onClick={cancelEdit}
+                  disabled={saveLoading}
+                  className="flex-1 flex items-center justify-center gap-2 border border-border-strong text-muted hover:bg-surface-warm px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
                 >
-                  <XCircle className="w-4 h-4" />
-                  Reject
+                  <X className="w-4 h-4" />
+                  Cancel
                 </button>
                 <button
-                  onClick={() => handleAction(selectedPost.id, "APPROVED")}
-                  disabled={!!actionLoading}
-                  className="flex-1 flex items-center justify-center gap-2 bg-success text-white hover:opacity-90 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+                  onClick={() => saveEdit(selectedPost.id)}
+                  disabled={saveLoading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-brand text-white hover:bg-brand-deep px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Approve
+                  {saveLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save Changes
                 </button>
               </div>
-            )}
+            ) : (
+              <>
+                {(postStatuses[selectedPost.id] ?? selectedPost.status) === "DRAFT" && (
+                  <div className="flex gap-3 p-5 pt-0">
+                    <button
+                      onClick={() => handleAction(selectedPost.id, "REJECTED")}
+                      disabled={!!actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleAction(selectedPost.id, "APPROVED")}
+                      disabled={!!actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 bg-success text-white hover:opacity-90 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approve
+                    </button>
+                  </div>
+                )}
 
-            {(postStatuses[selectedPost.id] ?? selectedPost.status) === "APPROVED" && (
-              <div className="px-5 pb-5">
-                <div className="flex items-center gap-2 text-success text-sm font-medium bg-success-bg border border-success/20 px-4 py-2.5 rounded-xl">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Approved — will be posted as scheduled
-                </div>
-              </div>
+                {(postStatuses[selectedPost.id] ?? selectedPost.status) === "APPROVED" && (
+                  <div className="px-5 pb-5">
+                    <div className="flex items-center gap-2 text-success text-sm font-medium bg-success-bg border border-success/20 px-4 py-2.5 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approved — will be posted as scheduled
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

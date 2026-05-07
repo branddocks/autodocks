@@ -11,6 +11,9 @@ import {
   BookOpen,
   Type,
   Loader2,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 
 interface QueuePost {
@@ -38,6 +41,12 @@ export function QueueClient({ initialPosts }: { initialPosts: QueuePost[] }) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
 
+  // Inline editing state per post
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCaption, setEditCaption] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
+
   const clients = [...new Set(posts.map((p) => p.clientName))];
 
   const filteredPosts =
@@ -63,6 +72,44 @@ export function QueueClient({ initialPosts }: { initialPosts: QueuePost[] }) {
     const drafts = filteredPosts.filter((p) => p.status === "DRAFT");
     for (const post of drafts) {
       await handleAction(post.id, "APPROVED");
+    }
+  };
+
+  const openEdit = (post: QueuePost) => {
+    setEditingId(post.id);
+    setEditCaption(post.caption);
+    setEditHashtags(post.hashtags.join(" "));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCaption("");
+    setEditHashtags("");
+  };
+
+  const saveEdit = async (postId: string) => {
+    setSaveLoading(true);
+    try {
+      const hashtags = editHashtags
+        .split(/[\s,]+/)
+        .map((t) => t.trim().replace(/^#/, ""))
+        .filter(Boolean)
+        .map((t) => `#${t}`);
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption: editCaption, hashtags }),
+      });
+      if (res.ok) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, caption: editCaption, hashtags } : p
+          )
+        );
+        cancelEdit();
+      }
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -127,6 +174,7 @@ export function QueueClient({ initialPosts }: { initialPosts: QueuePost[] }) {
             .join("")
             .slice(0, 2)
             .toUpperCase();
+          const isEditing = editingId === post.id;
 
           return (
             <div
@@ -167,55 +215,106 @@ export function QueueClient({ initialPosts }: { initialPosts: QueuePost[] }) {
                   )}
                 </div>
 
-                {/* Caption preview */}
-                <p className="text-sm text-foreground leading-relaxed line-clamp-3 mb-3">
-                  {post.caption}
-                </p>
-
-                {/* Hashtags */}
-                {post.hashtags.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                    <Hash className="w-3 h-3 text-muted-fg flex-shrink-0" />
-                    {post.hashtags.slice(0, 5).map((tag, i) => (
-                      <span key={i} className="text-xs text-brand font-medium">
-                        {tag}
-                      </span>
-                    ))}
-                    {post.hashtags.length > 5 && (
-                      <span className="text-xs text-muted-fg">
-                        +{post.hashtags.length - 5} more
-                      </span>
-                    )}
+                {/* Caption — view or edit */}
+                {isEditing ? (
+                  <div className="space-y-2 mb-3">
+                    <textarea
+                      value={editCaption}
+                      onChange={(e) => setEditCaption(e.target.value)}
+                      rows={5}
+                      className="w-full text-sm leading-relaxed bg-surface-warm rounded-xl p-3 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+                    />
+                    <input
+                      type="text"
+                      value={editHashtags}
+                      onChange={(e) => setEditHashtags(e.target.value)}
+                      placeholder="#tag1 #tag2 #tag3"
+                      className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                    />
                   </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-foreground leading-relaxed line-clamp-3 mb-3">
+                      {post.caption}
+                    </p>
+                    {post.hashtags.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                        <Hash className="w-3 h-3 text-muted-fg flex-shrink-0" />
+                        {post.hashtags.slice(0, 5).map((tag, i) => (
+                          <span key={i} className="text-xs text-brand font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                        {post.hashtags.length > 5 && (
+                          <span className="text-xs text-muted-fg">
+                            +{post.hashtags.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAction(post.id, "REJECTED")}
-                    disabled={!!actionLoading}
-                    className="flex items-center gap-1.5 border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === post.id + "REJECTED" ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <XCircle className="w-3 h-3" />
-                    )}
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleAction(post.id, "APPROVED")}
-                    disabled={!!actionLoading}
-                    className="flex items-center gap-1.5 bg-success text-white hover:opacity-90 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-                  >
-                    {actionLoading === post.id + "APPROVED" ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="w-3 h-3" />
-                    )}
-                    Approve
-                  </button>
-                </div>
+                {isEditing ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saveLoading}
+                      className="flex items-center gap-1.5 border border-border-strong text-muted hover:bg-surface-warm px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <X className="w-3 h-3" />
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => saveEdit(post.id)}
+                      disabled={saveLoading}
+                      className="flex items-center gap-1.5 bg-brand text-white hover:bg-brand-deep px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                    >
+                      {saveLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Save className="w-3 h-3" />
+                      )}
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEdit(post)}
+                      disabled={!!actionLoading}
+                      className="flex items-center gap-1.5 border border-border-strong text-muted hover:border-brand-100 hover:text-brand px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleAction(post.id, "REJECTED")}
+                      disabled={!!actionLoading}
+                      className="flex items-center gap-1.5 border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === post.id + "REJECTED" ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <XCircle className="w-3 h-3" />
+                      )}
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleAction(post.id, "APPROVED")}
+                      disabled={!!actionLoading}
+                      className="flex items-center gap-1.5 bg-success text-white hover:opacity-90 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                    >
+                      {actionLoading === post.id + "APPROVED" ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-3 h-3" />
+                      )}
+                      Approve
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
