@@ -129,6 +129,8 @@ model Calendar {
   contentMix      Json      @default("{\"educational\": 40, \"promotional\": 20, \"engagement\": 25, \"festive\": 15}")
   totalPosts      Int       @default(0)
 
+  shareToken      String?   @unique   // public approval link token
+
   posts           Post[]
 
   generatedAt     DateTime  @default(now())

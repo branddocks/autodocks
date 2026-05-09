@@ -8,6 +8,9 @@ import {
   CheckCircle2,
   Calendar,
   RefreshCw,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { CalendarGrid, GeneratedPostData } from "./CalendarGrid";
 
@@ -172,11 +175,34 @@ export function GenerateCalendarForm({
     setError("");
   };
 
+  // Share state
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareError, setShareError] = useState("");
+
+  const handleShare = async () => {
+    if (!calendarMeta?.id) return;
+    setShareLoading(true);
+    setShareError("");
+    try {
+      const res = await fetch(`/api/calendar/${calendarMeta.id}/share`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setShareError(data.error || "Failed to get share link"); return; }
+      await navigator.clipboard.writeText(data.shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 3000);
+    } catch {
+      setShareError("Could not copy link. Please try again.");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   // ── GENERATED VIEW ──────────────────────────────────────────────────────
   if (generatedPosts && calendarMeta) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle2 className="w-5 h-5 text-success" />
@@ -189,18 +215,48 @@ export function GenerateCalendarForm({
               {generatedPosts.length} posts generated · Click any post to view, edit, or approve
             </p>
           </div>
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center gap-2 bg-surface-warm border border-border-strong px-4 py-2 rounded-xl text-sm font-semibold hover:bg-surface transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            New Calendar
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Share with Client button */}
+            <button
+              onClick={handleShare}
+              disabled={shareLoading}
+              className="inline-flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-brand-deep transition-colors disabled:opacity-60"
+            >
+              {shareLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : shareCopied ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Share2 className="w-4 h-4" />
+              )}
+              {shareCopied ? "Link Copied!" : "Share with Client"}
+            </button>
+            <button
+              onClick={handleReset}
+              className="inline-flex items-center gap-2 bg-surface-warm border border-border-strong px-4 py-2 rounded-xl text-sm font-semibold hover:bg-surface transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              New Calendar
+            </button>
+          </div>
         </div>
+        {shareError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 mb-4">
+            {shareError}
+          </p>
+        )}
+        {shareCopied && (
+          <div className="flex items-center gap-2 text-sm text-success bg-success-bg border border-success/20 rounded-xl px-4 py-2.5 mb-4">
+            <Copy className="w-4 h-4" />
+            Approval link copied to clipboard! Send it to your client via WhatsApp or email.
+          </div>
+        )}
         <CalendarGrid
           posts={generatedPosts}
           month={calendarMeta.month}
           year={calendarMeta.year}
+          calendarId={calendarMeta.id}
+          clientName={calendarMeta.clientName}
         />
       </div>
     );

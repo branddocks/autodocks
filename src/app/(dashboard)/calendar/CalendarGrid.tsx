@@ -81,10 +81,14 @@ export function CalendarGrid({
   posts,
   month,
   year,
+  calendarId,
+  clientName,
 }: {
   posts: GeneratedPostData[];
   month: number;
   year: number;
+  calendarId?: string;
+  clientName?: string;
 }) {
   const [selectedPost, setSelectedPost] = useState<GeneratedPostData | null>(null);
   const [postStatuses, setPostStatuses] = useState<Record<string, string>>(

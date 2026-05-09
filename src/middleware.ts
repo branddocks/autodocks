@@ -19,7 +19,7 @@ export default withAuth(
         const { pathname } = req.nextUrl;
 
         // Public routes — always allow
-        const publicPaths = ["/", "/login", "/signup", "/api/auth"];
+        const publicPaths = ["/", "/login", "/signup", "/api/auth", "/approve", "/api/approve"];
         if (publicPaths.some((p) => pathname.startsWith(p))) return true;
 
         // Everything else requires auth
