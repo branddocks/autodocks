@@ -250,6 +250,8 @@ export async function POST(req: Request) {
             hashtags: post.hashtags ?? [],
             postType: mapPostType(post.postType ?? "single_image"),
             contentPillar: post.contentPillar ?? null,
+            topic: post.topic ?? null,
+            bestTime: post.bestTime ?? null,
             imagePrompt: post.imageDirection ?? null,
             scheduledAt: scheduledDate,
             status: "DRAFT",

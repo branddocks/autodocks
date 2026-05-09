@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Users } from "lucide-react";
-import { GenerateCalendarForm } from "./GenerateCalendarForm";
+import { GenerateCalendarForm, ExistingCalendar } from "./GenerateCalendarForm";
 
 async function getAgencyClients(userId: string) {
   const agency = await prisma.agency.findUnique({
@@ -27,6 +27,64 @@ async function getAgencyClients(userId: string) {
     },
   });
   return agency;
+}
+
+async function getRecentCalendar(clientId: string): Promise<ExistingCalendar | null> {
+  const calendar = await prisma.calendar.findFirst({
+    where: { clientId },
+    orderBy: { generatedAt: "desc" },
+    include: {
+      client: { select: { businessName: true } },
+      posts: {
+        orderBy: { scheduledAt: "asc" },
+        select: {
+          id: true,
+          caption: true,
+          hashtags: true,
+          postType: true,
+          contentPillar: true,
+          topic: true,
+          bestTime: true,
+          imagePrompt: true,
+          scheduledAt: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (!calendar) return null;
+
+  return {
+    id: calendar.id,
+    clientName: calendar.client.businessName,
+    month: calendar.month,
+    year: calendar.year,
+    posts: calendar.posts.map((p) => {
+      const scheduledAt = p.scheduledAt ? p.scheduledAt.toISOString() : null;
+      const date = p.scheduledAt
+        ? p.scheduledAt.toISOString().split("T")[0]
+        : null;
+      const day = p.scheduledAt
+        ? p.scheduledAt.toLocaleDateString("en-IN", { weekday: "long" })
+        : null;
+
+      return {
+        id: p.id,
+        date,
+        day,
+        postType: p.postType.toLowerCase(),
+        contentPillar: p.contentPillar,
+        topic: p.topic,
+        caption: p.caption,
+        hashtags: (p.hashtags as string[]) ?? [],
+        bestTime: p.bestTime,
+        imageDirection: p.imagePrompt,
+        scheduledAt,
+        status: p.status,
+      };
+    }),
+  };
 }
 
 export default async function CalendarPage({
@@ -74,6 +132,16 @@ export default async function CalendarPage({
     );
   }
 
+  const defaultClientId =
+    preselectedClientId && clients.find((c) => c.id === preselectedClientId)
+      ? preselectedClientId
+      : clients[0]?.id;
+
+  // Load most recent calendar for the default client so it shows immediately
+  const existingCalendar = defaultClientId
+    ? await getRecentCalendar(defaultClientId)
+    : null;
+
   const clientsForForm = clients.map((c) => ({
     id: c.id,
     businessName: c.businessName,
@@ -95,6 +163,7 @@ export default async function CalendarPage({
       <GenerateCalendarForm
         clients={clientsForForm}
         preselectedClientId={preselectedClientId}
+        existingCalendar={existingCalendar}
       />
     </div>
   );

@@ -21,6 +21,14 @@ interface Client {
   brandColors: string[];
 }
 
+export interface ExistingCalendar {
+  id: string;
+  clientName: string;
+  month: number;
+  year: number;
+  posts: GeneratedPostData[];
+}
+
 interface ContentMix {
   educational: number;
   promotional: number;
@@ -49,9 +57,11 @@ const GENERATION_STEPS = [
 export function GenerateCalendarForm({
   clients,
   preselectedClientId,
+  existingCalendar,
 }: {
   clients: Client[];
   preselectedClientId?: string;
+  existingCalendar?: ExistingCalendar | null;
 }) {
   const now = new Date();
   const defaultClientId =
@@ -72,13 +82,25 @@ export function GenerateCalendarForm({
   const [loading, setLoading] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState("");
-  const [generatedPosts, setGeneratedPosts] = useState<GeneratedPostData[] | null>(null);
+  // Pre-populate state from server-loaded calendar so grid shows on first render
+  const [generatedPosts, setGeneratedPosts] = useState<GeneratedPostData[] | null>(
+    existingCalendar?.posts ?? null
+  );
   const [calendarMeta, setCalendarMeta] = useState<{
     id: string;
     clientName: string;
     month: number;
     year: number;
-  } | null>(null);
+  } | null>(
+    existingCalendar
+      ? {
+          id: existingCalendar.id,
+          clientName: existingCalendar.clientName,
+          month: existingCalendar.month,
+          year: existingCalendar.year,
+        }
+      : null
+  );
 
   const selectedClient = clients.find((c) => c.id === selectedClientId);
 
