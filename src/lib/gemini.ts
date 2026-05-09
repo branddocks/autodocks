@@ -43,7 +43,7 @@ export async function callGemini(
     ],
     generationConfig: {
       temperature: options?.temperature ?? 0.8,
-      maxOutputTokens: options?.maxOutputTokens ?? 8192,
+      maxOutputTokens: options?.maxOutputTokens ?? 32768,
       ...(options?.jsonMode ? { responseMimeType: "application/json" } : {}),
     },
   };
@@ -72,7 +72,7 @@ export async function generateCalendarContent(prompt: {
 }): Promise<GeneratedPost[]> {
   const raw = await callGemini(prompt.systemPrompt, prompt.userPrompt, {
     temperature: 0.85,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 32768,
     jsonMode: true,
   });
 
