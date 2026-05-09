@@ -4,7 +4,7 @@
  */
 
 const GEMINI_API_KEY = process.env.GOOGLE_API_KEY ?? "";
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 interface GeminiMessage {
@@ -72,7 +72,7 @@ export async function generateCalendarContent(prompt: {
 }): Promise<GeneratedPost[]> {
   const raw = await callGemini(prompt.systemPrompt, prompt.userPrompt, {
     temperature: 0.85,
-    maxOutputTokens: 8192, // gemini-2.0-flash hard limit
+    maxOutputTokens: 8192,
     jsonMode: true,
   });
 
