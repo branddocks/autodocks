@@ -14,6 +14,9 @@ import {
   Pencil,
   Save,
   Loader2,
+  Send,
+  Link as LinkIcon,
+  Instagram,
 } from "lucide-react";
 
 export interface GeneratedPostData {
@@ -27,6 +30,7 @@ export interface GeneratedPostData {
   hashtags: string[] | null;
   bestTime: string | null;
   imageDirection: string | null;
+  imageUrl?: string | null;
   scheduledAt: string | null;
   status: string;
 }
@@ -83,12 +87,14 @@ export function CalendarGrid({
   year,
   calendarId,
   clientName,
+  clientId,
 }: {
   posts: GeneratedPostData[];
   month: number;
   year: number;
   calendarId?: string;
   clientName?: string;
+  clientId?: string;
 }) {
   const [selectedPost, setSelectedPost] = useState<GeneratedPostData | null>(null);
   const [postStatuses, setPostStatuses] = useState<Record<string, string>>(
@@ -102,6 +108,17 @@ export function CalendarGrid({
   const [editHashtags, setEditHashtags] = useState("");
   const [saveLoading, setSaveLoading] = useState(false);
   const [savedData, setSavedData] = useState<Record<string, { caption: string; hashtags: string[] }>>({});
+
+  // Image URL state
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [showImageInput, setShowImageInput] = useState(false);
+  const [imageInputVal, setImageInputVal] = useState("");
+  const [imageSaving, setImageSaving] = useState(false);
+
+  // Publish state
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState("");
+  const [postedIds, setPostedIds] = useState<Record<string, boolean>>({});
 
   const cells = buildMonthGrid(year, month);
 
@@ -169,6 +186,44 @@ export function CalendarGrid({
       }
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const saveImageUrl = async (postId: string) => {
+    setImageSaving(true);
+    try {
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: imageInputVal.trim() || null }),
+      });
+      if (res.ok) {
+        setImageUrls((prev) => ({ ...prev, [postId]: imageInputVal.trim() }));
+        setShowImageInput(false);
+        setImageInputVal("");
+      }
+    } finally {
+      setImageSaving(false);
+    }
+  };
+
+  const handlePublish = async (postId: string) => {
+    setPublishLoading(true);
+    setPublishError("");
+    try {
+      const res = await fetch(`/api/posts/${postId}/publish`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishError(data.error ?? "Publish failed. Try again.");
+        return;
+      }
+      setPostedIds((prev) => ({ ...prev, [postId]: true }));
+      setPostStatuses((prev) => ({ ...prev, [postId]: "POSTED" }));
+      if (selectedPost?.id === postId) {
+        setSelectedPost((p) => p ? { ...p, status: "POSTED" } : null);
+      }
+    } finally {
+      setPublishLoading(false);
     }
   };
 
@@ -484,10 +539,101 @@ export function CalendarGrid({
                 )}
 
                 {(postStatuses[selectedPost.id] ?? selectedPost.status) === "APPROVED" && (
+                  <div className="px-5 pb-5 space-y-3">
+                    {/* Image URL section */}
+                    {!showImageInput ? (
+                      <div className="flex items-center justify-between text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-border-strong">
+                        {imageUrls[selectedPost.id] || selectedPost.imageUrl ? (
+                          <span className="text-success font-medium flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            Image attached
+                          </span>
+                        ) : (
+                          <span className="text-muted flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            No image — required for publishing
+                          </span>
+                        )}
+                        <button
+                          onClick={() => {
+                            setImageInputVal(imageUrls[selectedPost.id] || selectedPost.imageUrl || "");
+                            setShowImageInput(true);
+                          }}
+                          className="text-xs text-brand hover:text-brand-deep font-medium flex items-center gap-1"
+                        >
+                          <LinkIcon className="w-3 h-3" />
+                          {imageUrls[selectedPost.id] || selectedPost.imageUrl ? "Change" : "Add Image URL"}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <input
+                          type="url"
+                          value={imageInputVal}
+                          onChange={(e) => setImageInputVal(e.target.value)}
+                          placeholder="https://your-image-url.com/image.jpg"
+                          className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setShowImageInput(false); setImageInputVal(""); }}
+                            className="flex-1 text-sm border border-border-strong rounded-xl py-2 text-muted hover:bg-surface-warm transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveImageUrl(selectedPost.id)}
+                            disabled={imageSaving}
+                            className="flex-1 text-sm bg-brand text-white rounded-xl py-2 font-semibold hover:bg-brand-deep transition-colors disabled:opacity-50"
+                          >
+                            {imageSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Publish error */}
+                    {publishError && (
+                      <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                        {publishError}
+                      </p>
+                    )}
+
+                    {/* Publish button */}
+                    {!postedIds[selectedPost.id] ? (
+                      <button
+                        onClick={() => handlePublish(selectedPost.id)}
+                        disabled={publishLoading || !(imageUrls[selectedPost.id] || selectedPost.imageUrl)}
+                        className="w-full flex items-center justify-center gap-2 bg-[#E1306C] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {publishLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Instagram className="w-4 h-4" />
+                        )}
+                        {publishLoading ? "Publishing…" : "Publish to Instagram"}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-success text-sm font-medium bg-success-bg border border-success/20 px-4 py-2.5 rounded-xl">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Published to Instagram!
+                      </div>
+                    )}
+                    <p className="text-xs text-muted text-center">
+                      Connect Instagram in{" "}
+                      <a href={clientId ? `/clients/${clientId}` : "/clients"} className="text-brand underline">
+                        client settings
+                      </a>{" "}
+                      to enable publishing
+                    </p>
+                  </div>
+                )}
+
+                {(postStatuses[selectedPost.id] ?? selectedPost.status) === "POSTED" && (
                   <div className="px-5 pb-5">
-                    <div className="flex items-center gap-2 text-success text-sm font-medium bg-success-bg border border-success/20 px-4 py-2.5 rounded-xl">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Approved — will be posted as scheduled
+                    <div className="flex items-center gap-2 text-brand text-sm font-medium bg-brand-50 border border-brand-100 px-4 py-2.5 rounded-xl">
+                      <Send className="w-4 h-4" />
+                      Posted to Instagram
                     </div>
                   </div>
                 )}

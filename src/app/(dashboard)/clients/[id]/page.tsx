@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ClientEditForm } from "./ClientEditForm";
+import { InstagramConnectForm } from "./InstagramConnectForm";
 
 async function getClient(clientId: string, userId: string) {
   const client = await prisma.client.findFirst({
@@ -32,6 +33,7 @@ async function getClient(clientId: string, userId: string) {
         select: { status: true },
       },
     },
+    // IG fields are on the model — select via include
   });
   return client;
 }
@@ -184,6 +186,14 @@ export default async function ClientDetailPage({
           <p className="text-sm text-foreground whitespace-pre-wrap">{client.extraContext}</p>
         </div>
       )}
+
+      {/* Instagram connection */}
+      <InstagramConnectForm
+        clientId={client.id}
+        igUserId={client.igUserId ?? ""}
+        igUsername={client.igUsername ?? ""}
+        isConnected={!!client.igUserId}
+      />
 
       {/* Edit form — client component */}
       <ClientEditForm

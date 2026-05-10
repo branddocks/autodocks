@@ -67,6 +67,7 @@ export async function PATCH(
 
     if (body.caption !== undefined) updateData.caption = String(body.caption);
     if (body.hashtags !== undefined) updateData.hashtags = body.hashtags;
+    if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl ? String(body.imageUrl) : null;
     if (body.scheduledAt !== undefined) {
       updateData.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     }

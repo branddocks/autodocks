@@ -279,6 +279,7 @@ export function GenerateCalendarForm({
           year={calendarMeta.year}
           calendarId={calendarMeta.id}
           clientName={calendarMeta.clientName}
+          clientId={selectedClientId}
         />
       </div>
     );
