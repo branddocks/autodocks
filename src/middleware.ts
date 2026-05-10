@@ -68,9 +68,10 @@ export default withAuth(
 
         // Public routes — always allow
         const publicPaths = [
-          "/", "/login", "/signup",
+          "/", "/login", "/signup", "/pricing",
           "/api/auth", "/approve", "/api/approve",
           "/control/login",
+          "/api/webhooks", // Razorpay webhooks must be unauthenticated
         ];
         if (publicPaths.some((p) => pathname.startsWith(p))) return true;
 
