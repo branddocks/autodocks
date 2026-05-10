@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ControlSubscriptionForm } from "./ControlSubscriptionForm";
 
-export default async function ControlAgencyDetailPage({ params }: { params: { id: string } }) {
+export default async function ControlAgencyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const agency = await prisma.agency.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       user: { select: { id: true, email: true, name: true, createdAt: true } },
       clients: {
