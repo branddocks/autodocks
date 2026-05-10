@@ -18,7 +18,7 @@ export default async function ControlLayout({ children }: { children: React.Reac
     redirect("/dashboard");
   }
 
-  const headersList = headers();
+  const headersList = await headers();
   const host = headersList.get("host") ?? "";
   const isSubdomain = host.startsWith("admin.");
 
