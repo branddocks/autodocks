@@ -15,8 +15,10 @@ import {
   Save,
   Loader2,
   Send,
-  Link as LinkIcon,
   Instagram,
+  Sparkles,
+  RefreshCw,
+  Upload,
 } from "lucide-react";
 
 export interface GeneratedPostData {
@@ -115,6 +117,10 @@ export function CalendarGrid({
   const [imageInputVal, setImageInputVal] = useState("");
   const [imageSaving, setImageSaving] = useState(false);
 
+  // Image generation state
+  const [imageGenLoading, setImageGenLoading] = useState<Record<string, boolean>>({});
+  const [imageGenError, setImageGenError] = useState<Record<string, string>>({});
+
   // Publish state
   const [publishLoading, setPublishLoading] = useState(false);
   const [publishError, setPublishError] = useState("");
@@ -186,6 +192,28 @@ export function CalendarGrid({
       }
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const handleGenerateImage = async (postId: string) => {
+    setImageGenLoading((prev) => ({ ...prev, [postId]: true }));
+    setImageGenError((prev) => ({ ...prev, [postId]: "" }));
+    try {
+      const res = await fetch("/api/generate/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImageGenError((prev) => ({ ...prev, [postId]: data.error ?? "Image generation failed." }));
+        return;
+      }
+      setImageUrls((prev) => ({ ...prev, [postId]: data.imageUrl }));
+      // Update selectedPost so the preview shows immediately
+      setSelectedPost((p) => p ? { ...p, imageUrl: data.imageUrl } : null);
+    } finally {
+      setImageGenLoading((prev) => ({ ...prev, [postId]: false }));
     }
   };
 
@@ -470,17 +498,99 @@ export function CalendarGrid({
                 )}
               </div>
 
-              {/* Image direction */}
-              {selectedPost.imageDirection && (
-                <div>
-                  <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <ImageIcon className="w-3 h-3" /> Image Direction
+              {/* Image section */}
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <ImageIcon className="w-3 h-3" /> Image
+                </p>
+
+                {/* Preview */}
+                {(imageUrls[selectedPost.id] || selectedPost.imageUrl) && (
+                  <div className="mb-3 rounded-xl overflow-hidden border border-border-strong">
+                    <img
+                      src={imageUrls[selectedPost.id] || selectedPost.imageUrl!}
+                      alt="Post image"
+                      className="w-full aspect-square object-cover"
+                    />
+                  </div>
+                )}
+
+                {/* Direction hint */}
+                {selectedPost.imageDirection && (
+                  <p className="text-xs text-muted italic mb-2 px-0.5">
+                    Direction: {selectedPost.imageDirection}
                   </p>
-                  <p className="text-sm text-muted italic bg-surface-warm rounded-xl p-3 border border-border-strong">
-                    {selectedPost.imageDirection}
+                )}
+
+                {/* Generate + Upload URL buttons */}
+                {!showImageInput && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleGenerateImage(selectedPost.id)}
+                      disabled={!!imageGenLoading[selectedPost.id]}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-brand text-white rounded-xl px-3 py-2 font-semibold hover:bg-brand-deep transition-all disabled:opacity-50"
+                    >
+                      {imageGenLoading[selectedPost.id] ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (imageUrls[selectedPost.id] || selectedPost.imageUrl) ? (
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      {imageGenLoading[selectedPost.id]
+                        ? "Generating…"
+                        : (imageUrls[selectedPost.id] || selectedPost.imageUrl)
+                        ? "Regenerate"
+                        : "Generate Image"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setImageInputVal(imageUrls[selectedPost.id] || selectedPost.imageUrl || "");
+                        setShowImageInput(true);
+                      }}
+                      className="flex items-center gap-1.5 text-xs border border-border-strong text-muted hover:bg-surface-warm rounded-xl px-3 py-2 transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload URL
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload URL input */}
+                {showImageInput && (
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      value={imageInputVal}
+                      onChange={(e) => setImageInputVal(e.target.value)}
+                      placeholder="https://your-image-url.com/image.jpg"
+                      className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setShowImageInput(false); setImageInputVal(""); }}
+                        className="flex-1 text-sm border border-border-strong rounded-xl py-2 text-muted hover:bg-surface-warm transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => saveImageUrl(selectedPost.id)}
+                        disabled={imageSaving}
+                        className="flex-1 text-sm bg-brand text-white rounded-xl py-2 font-semibold hover:bg-brand-deep transition-colors disabled:opacity-50"
+                      >
+                        {imageSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : "Save URL"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Gen error */}
+                {imageGenError[selectedPost.id] && (
+                  <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    {imageGenError[selectedPost.id]}
                   </p>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Best time */}
               {selectedPost.bestTime && (
@@ -540,58 +650,6 @@ export function CalendarGrid({
 
                 {(postStatuses[selectedPost.id] ?? selectedPost.status) === "APPROVED" && (
                   <div className="px-5 pb-5 space-y-3">
-                    {/* Image URL section */}
-                    {!showImageInput ? (
-                      <div className="flex items-center justify-between text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-border-strong">
-                        {imageUrls[selectedPost.id] || selectedPost.imageUrl ? (
-                          <span className="text-success font-medium flex items-center gap-1.5">
-                            <ImageIcon className="w-3.5 h-3.5" />
-                            Image attached
-                          </span>
-                        ) : (
-                          <span className="text-muted flex items-center gap-1.5">
-                            <ImageIcon className="w-3.5 h-3.5" />
-                            No image — required for publishing
-                          </span>
-                        )}
-                        <button
-                          onClick={() => {
-                            setImageInputVal(imageUrls[selectedPost.id] || selectedPost.imageUrl || "");
-                            setShowImageInput(true);
-                          }}
-                          className="text-xs text-brand hover:text-brand-deep font-medium flex items-center gap-1"
-                        >
-                          <LinkIcon className="w-3 h-3" />
-                          {imageUrls[selectedPost.id] || selectedPost.imageUrl ? "Change" : "Add Image URL"}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <input
-                          type="url"
-                          value={imageInputVal}
-                          onChange={(e) => setImageInputVal(e.target.value)}
-                          placeholder="https://your-image-url.com/image.jpg"
-                          className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setShowImageInput(false); setImageInputVal(""); }}
-                            className="flex-1 text-sm border border-border-strong rounded-xl py-2 text-muted hover:bg-surface-warm transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveImageUrl(selectedPost.id)}
-                            disabled={imageSaving}
-                            className="flex-1 text-sm bg-brand text-white rounded-xl py-2 font-semibold hover:bg-brand-deep transition-colors disabled:opacity-50"
-                          >
-                            {imageSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : "Save"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Publish error */}
                     {publishError && (
                       <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -618,6 +676,11 @@ export function CalendarGrid({
                         <CheckCircle2 className="w-4 h-4" />
                         Published to Instagram!
                       </div>
+                    )}
+                    {!(imageUrls[selectedPost.id] || selectedPost.imageUrl) && (
+                      <p className="text-xs text-muted text-center">
+                        Generate or add an image above, then publish
+                      </p>
                     )}
                     <p className="text-xs text-muted text-center">
                       Connect Instagram in{" "}
