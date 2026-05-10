@@ -78,6 +78,7 @@ model Agency {
   razorpayCustomerId String?
   subStatus       SubStatus @default(TRIAL)
   trialEndsAt     DateTime?
+  adminNote       String?   @db.Text
 
   clients         Client[]
 
@@ -178,6 +179,7 @@ model Post {
 enum Plan {
   STARTER
   PRO
+  ENTERPRISE
 }
 
 enum SubStatus {

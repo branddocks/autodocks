@@ -1,14 +1,22 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import { ADMIN_EMAIL } from "@/lib/admin";
 
 export default withAuth(
   function middleware(req) {
-    // If authenticated user hits /login or /signup, redirect to dashboard
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
+    // If authenticated user hits /login or /signup, redirect to dashboard
     if (token && (pathname === "/login" || pathname === "/signup")) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    // /admin/* is restricted to the super-admin email only
+    if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+      if (token?.email !== ADMIN_EMAIL) {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
     }
 
     return NextResponse.next();
