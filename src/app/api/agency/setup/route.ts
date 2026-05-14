@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   try {
@@ -42,6 +43,15 @@ export async function POST(req: Request) {
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       },
     });
+
+    // Fire welcome email for Google OAuth signups
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true, name: true },
+    });
+    if (user?.email) {
+      sendWelcomeEmail({ to: user.email, name: user.name ?? "there" }).catch(() => {});
+    }
 
     return NextResponse.json(
       { message: "Agency created", agency },

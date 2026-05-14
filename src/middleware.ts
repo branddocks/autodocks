@@ -2,6 +2,13 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import { ADMIN_EMAIL } from "@/lib/admin";
 
+function isTrialExpired(token: { subStatus?: string; trialEndsAt?: string | null } | null): boolean {
+  if (!token) return false;
+  if (token.subStatus !== "TRIAL") return false;
+  if (!token.trialEndsAt) return false;
+  return new Date(token.trialEndsAt) < new Date();
+}
+
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
@@ -57,6 +64,17 @@ export default withAuth(
     // ── Normal users: redirect away from login if already authed ────────────
     if (token && (pathname === "/login" || pathname === "/signup")) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    // ── Trial expiry gate ────────────────────────────────────────────────────
+    // If the trial has expired, only allow /settings (to subscribe) and /pricing.
+    // Block all other authenticated dashboard routes until they pick a plan.
+    if (token && isTrialExpired(token as { subStatus?: string; trialEndsAt?: string | null })) {
+      const allowedOnExpiry = ["/settings", "/pricing", "/api/razorpay", "/api/auth", "/api/webhooks"];
+      const isAllowed = allowedOnExpiry.some((p) => pathname.startsWith(p));
+      if (!isAllowed && !pathname.startsWith("/control") && !pathname.startsWith("/admin")) {
+        return NextResponse.redirect(new URL("/settings?expired=1", req.url));
+      }
     }
 
     return NextResponse.next();

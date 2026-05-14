@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyWebhookSignature } from "@/lib/razorpay";
+import { sendPaymentFailedEmail } from "@/lib/email";
 
 /**
  * POST /api/webhooks/razorpay
@@ -86,6 +87,8 @@ export async function POST(req: Request) {
         const subId = sub?.id ?? payment?.subscription_id;
         if (subId) {
           await updateAgency(subId, { subStatus: "PAST_DUE" });
+          // Notify the agency owner
+          sendPaymentFailedEmailForSub(subId).catch(() => {});
         }
         break;
       }
@@ -114,6 +117,19 @@ function detectPlan(planId: string | undefined): "STARTER" | "PRO" {
   if (planId === STARTER_PLAN) return "STARTER";
   // Unknown plan ID — default to STARTER
   return "STARTER";
+}
+
+async function sendPaymentFailedEmailForSub(subscriptionId: string): Promise<void> {
+  const agency = await prisma.agency.findFirst({
+    where: { razorpaySubId: subscriptionId },
+    select: { user: { select: { email: true, name: true } } },
+  });
+  if (agency?.user?.email) {
+    await sendPaymentFailedEmail({
+      to: agency.user.email,
+      name: agency.user.name ?? "there",
+    });
+  }
 }
 
 async function updateAgency(

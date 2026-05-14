@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   try {
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
       },
       include: { agency: true },
     });
+
+    // Fire welcome email async — don't block the response
+    sendWelcomeEmail({ to: email, name: name }).catch(() => {});
 
     return NextResponse.json(
       { message: "Account created", userId: user.id },

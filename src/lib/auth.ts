@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { sendTrialEndingEmail } from "@/lib/email";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -78,6 +79,29 @@ export const authOptions: NextAuthOptions = {
           token.plan = agency.plan;
           token.subStatus = agency.subStatus;
           token.trialEndsAt = agency.trialEndsAt?.toISOString() ?? null;
+
+          // Fire trial-ending warning email when ≤2 days remain (best effort)
+          if (
+            agency.subStatus === "TRIAL" &&
+            agency.trialEndsAt &&
+            token.id
+          ) {
+            const msLeft = agency.trialEndsAt.getTime() - Date.now();
+            const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+            if (daysLeft <= 2 && daysLeft > 0) {
+              const userRecord = await prisma.user.findUnique({
+                where: { id: token.id as string },
+                select: { email: true, name: true },
+              });
+              if (userRecord?.email) {
+                sendTrialEndingEmail({
+                  to: userRecord.email,
+                  name: userRecord.name ?? "there",
+                  daysLeft,
+                }).catch(() => {});
+              }
+            }
+          }
         } else {
           // Explicitly mark as checked-but-no-agency to avoid repeated DB queries
           token.agencyId = null as any;
