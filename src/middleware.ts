@@ -90,6 +90,7 @@ export default withAuth(
           "/api/auth", "/approve", "/api/approve",
           "/control/login",
           "/api/webhooks", // Razorpay webhooks must be unauthenticated
+          "/api/cron",     // Vercel cron jobs — auth handled inside the handler
         ];
         if (publicPaths.some((p) => pathname.startsWith(p))) return true;
 
