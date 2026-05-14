@@ -60,8 +60,9 @@ export const authOptions: NextAuthOptions = {
         return { ...token, ...session };
       }
 
-      // Fetch agency data once — undefined means "never checked", null means "checked, no agency yet"
-      if (token.id && token.agencyId === undefined) {
+      // Always re-fetch agency data so admin subscription overrides propagate
+      // immediately without requiring the user to sign out and back in.
+      if (token.id) {
         const agency = await prisma.agency.findUnique({
           where: { userId: token.id as string },
           select: {
@@ -103,7 +104,6 @@ export const authOptions: NextAuthOptions = {
             }
           }
         } else {
-          // Explicitly mark as checked-but-no-agency to avoid repeated DB queries
           token.agencyId = null as any;
         }
       }

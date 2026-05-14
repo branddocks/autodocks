@@ -8,13 +8,14 @@ import { isAdmin } from "@/lib/admin";
 // Updates plan, subStatus, trialEndsAt, adminNote for any agency
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { id } = await params;
   const body = await req.json();
   const { plan, subStatus, trialEndsAt, adminNote } = body;
 
@@ -24,31 +25,36 @@ export async function PATCH(
   if (trialEndsAt !== undefined) data.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
   if (adminNote !== undefined) data.adminNote = adminNote;
 
-  const agency = await prisma.agency.update({
-    where: { id: params.id },
-    data,
-    include: {
-      user: { select: { email: true, name: true } },
-      _count: { select: { clients: true } },
-    },
-  });
-
-  return NextResponse.json({ agency });
+  try {
+    const agency = await prisma.agency.update({
+      where: { id },
+      data,
+      include: {
+        user: { select: { email: true, name: true } },
+        _count: { select: { clients: true } },
+      },
+    });
+    return NextResponse.json({ agency });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Update failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 // GET /api/admin/agencies/[id]
 // Full agency detail for admin
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { id } = await params;
   const agency = await prisma.agency.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       user: { select: { id: true, email: true, name: true, createdAt: true } },
       clients: {
