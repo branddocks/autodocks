@@ -1,17 +1,16 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 
 // PATCH /api/admin/agencies/[id]
 // Updates plan, subStatus, trialEndsAt, adminNote for any agency
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email || !isAdmin(session.user.email)) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token?.email || !isAdmin(token.email as string)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -44,11 +43,11 @@ export async function PATCH(
 // GET /api/admin/agencies/[id]
 // Full agency detail for admin
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email || !isAdmin(session.user.email)) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token?.email || !isAdmin(token.email as string)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

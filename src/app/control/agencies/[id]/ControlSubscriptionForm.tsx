@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Props {
   agencyId: string;
@@ -29,6 +30,7 @@ export function ControlSubscriptionForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const router = useRouter();
 
   const save = async () => {
     setSaving(true); setError(""); setSaved(false);
@@ -48,6 +50,7 @@ export function ControlSubscriptionForm({
         setError(d.error ?? "Save failed"); return;
       }
       setSaved(true);
+      router.refresh(); // re-render server component so badges + account details update
       setTimeout(() => setSaved(false), 3000);
     } finally {
       setSaving(false);
