@@ -48,20 +48,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    if (!post.imagePrompt) {
-      return NextResponse.json(
-        { error: "This post has no image direction. Edit the post to add one." },
-        { status: 400 }
-      );
-    }
-
     const brandColors = (post.client.brandColors as string[]) ?? ["#D4764E", "#1A1A1A"];
 
-    // Step 1: Build an enhanced image prompt
+    // imagePrompt stores the Gemini-generated imageDirection; fall back to topic/caption
+    const rawDirection =
+      post.imagePrompt ?? post.topic ?? post.caption.slice(0, 120);
+
+    // Step 1: Build an enhanced image prompt via Gemini
     let finalPrompt: string;
     try {
       finalPrompt = await buildImagePrompt({
-        imageDirection: post.imagePrompt,
+        imageDirection: rawDirection,
         businessName: post.client.businessName,
         niche: post.client.niche,
         brandColors,
@@ -69,8 +66,8 @@ export async function POST(req: Request) {
         topic: post.topic,
       });
     } catch {
-      // Fall back to raw image direction
-      finalPrompt = post.imagePrompt;
+      // If Gemini prompt builder fails, use the raw direction directly
+      finalPrompt = rawDirection;
     }
 
     // Step 2: Generate image with Imagen 3
