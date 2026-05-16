@@ -108,7 +108,14 @@ model Client {
   igUsername       String?
   igAccessToken   String?   @db.Text
   igTokenExpiry   DateTime?
+
+  // Facebook Pages
   fbPageId        String?
+  fbPageToken     String?   @db.Text
+
+  // LinkedIn Company Pages
+  linkedInOrgId   String?
+  linkedInToken   String?   @db.Text
 
   isActive        Boolean   @default(true)
 

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ClientEditForm } from "./ClientEditForm";
 import { InstagramConnectForm } from "./InstagramConnectForm";
+import { PlatformConnectForm } from "./PlatformConnectForm";
 
 async function getClient(clientId: string, userId: string) {
   const client = await prisma.client.findFirst({
@@ -193,6 +194,15 @@ export default async function ClientDetailPage({
         igUserId={client.igUserId ?? ""}
         igUsername={client.igUsername ?? ""}
         isConnected={!!client.igUserId}
+      />
+
+      {/* Facebook + LinkedIn connections */}
+      <PlatformConnectForm
+        clientId={client.id}
+        fbPageId={client.fbPageId ?? ""}
+        fbConnected={!!client.fbPageId && !!(client as any).fbPageToken}
+        linkedInOrgId={(client as any).linkedInOrgId ?? ""}
+        linkedInConnected={!!(client as any).linkedInOrgId && !!(client as any).linkedInToken}
       />
 
       {/* Edit form — client component */}

@@ -81,6 +81,11 @@ export async function PATCH(
       "extraContext",
       "logoUrl",
       "isActive",
+      // Platform publishing credentials
+      "fbPageId",
+      "fbPageToken",
+      "linkedInOrgId",
+      "linkedInToken",
     ];
 
     const updateData: Record<string, unknown> = {};

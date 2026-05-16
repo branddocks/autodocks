@@ -1,24 +1,22 @@
 /**
  * GET /api/cron/publish
  *
- * Vercel Cron Job — runs every 5 minutes.
- * Finds all APPROVED posts with scheduledAt <= now and posts them to Instagram.
+ * Vercel Cron Job — runs daily at midnight UTC.
+ * Finds all APPROVED posts with scheduledAt <= now and publishes them to
+ * every platform the client has connected: Instagram, Facebook, LinkedIn.
  *
- * Security: Vercel sends "Authorization: Bearer <CRON_SECRET>" header automatically.
+ * Security: Vercel sends "Authorization: Bearer <CRON_SECRET>" automatically.
  * Set CRON_SECRET in your Vercel environment variables.
  *
  * Post lifecycle:
- *   APPROVED → POSTING (locked) → POSTED (success) | FAILED (error)
- *
- * Instagram API: Meta Graph API v19.0
- *   1. Create media container  POST /{ig-user-id}/media
- *   2. Publish container       POST /{ig-user-id}/media_publish
+ *   APPROVED → POSTING (locked) → POSTED (success) | FAILED (all platforms failed)
  */
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const IG_API = "https://graph.facebook.com/v19.0";
+const LI_API = "https://api.linkedin.com/v2";
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
 export async function GET(req: Request) {
@@ -34,18 +32,19 @@ export async function GET(req: Request) {
 
   try {
     // ── Find due posts ──────────────────────────────────────────────────────
-    // Grab up to 20 posts per run to stay within the 10s Vercel function timeout.
+    // Include any client with at least one platform connected.
     const duePosts = await prisma.post.findMany({
       where: {
         status: "APPROVED",
         scheduledAt: { lte: new Date() },
         client: {
-          igUserId: { not: null },
-          igAccessToken: { not: null },
           isActive: true,
-          agency: {
-            subStatus: { in: ["ACTIVE", "TRIAL"] },
-          },
+          agency: { subStatus: { in: ["ACTIVE", "TRIAL"] } },
+          OR: [
+            { igUserId: { not: null }, igAccessToken: { not: null } },
+            { fbPageId: { not: null }, fbPageToken: { not: null } },
+            { linkedInOrgId: { not: null }, linkedInToken: { not: null } },
+          ],
         },
       },
       include: {
@@ -54,6 +53,10 @@ export async function GET(req: Request) {
             businessName: true,
             igUserId: true,
             igAccessToken: true,
+            fbPageId: true,
+            fbPageToken: true,
+            linkedInOrgId: true,
+            linkedInToken: true,
           },
         },
       },
@@ -65,15 +68,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ processed: 0, elapsed: Date.now() - startedAt });
     }
 
-    console.log(`[cron/publish] ${duePosts.length} post(s) due for publishing`);
+    console.log(`[cron/publish] ${duePosts.length} post(s) due`);
 
-    // ── Lock posts immediately to prevent double-publishing ─────────────────
+    // ── Lock immediately to prevent double-publishing ───────────────────────
     await prisma.post.updateMany({
       where: { id: { in: duePosts.map((p) => p.id) } },
       data: { status: "POSTING" },
     });
 
-    // ── Publish each post ───────────────────────────────────────────────────
+    // ── Publish each post to all connected platforms ────────────────────────
     const results = await Promise.allSettled(
       duePosts.map((post) => publishPost(post))
     );
@@ -95,7 +98,7 @@ export async function GET(req: Request) {
   }
 }
 
-// ─── Publish a single post to Instagram ────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PostWithClient {
   id: string;
@@ -106,91 +109,250 @@ interface PostWithClient {
     businessName: string;
     igUserId: string | null;
     igAccessToken: string | null;
+    fbPageId: string | null;
+    fbPageToken: string | null;
+    linkedInOrgId: string | null;
+    linkedInToken: string | null;
   };
 }
 
+// ─── Main publish orchestrator ────────────────────────────────────────────────
+
 async function publishPost(post: PostWithClient): Promise<{ success: boolean }> {
-  const { igUserId, igAccessToken } = post.client;
-
-  if (!igUserId || !igAccessToken) {
-    await markFailed(post.id, "Instagram credentials missing");
-    return { success: false };
-  }
-
-  if (!post.imageUrl) {
-    await markFailed(post.id, "No image URL — skipped by cron");
-    return { success: false };
-  }
-
   const hashtags = (post.hashtags as string[]) ?? [];
   const fullCaption = hashtags.length
     ? `${post.caption}\n\n${hashtags.join(" ")}`
     : post.caption;
 
-  try {
-    // Step 1: Create media container
-    const containerRes = await fetch(`${IG_API}/${igUserId}/media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_url: post.imageUrl,
-        caption: fullCaption,
-        access_token: igAccessToken,
-      }),
-    });
+  const platforms: Promise<{ platform: string; ok: boolean; id?: string; error?: string }>[] = [];
 
-    if (!containerRes.ok) {
-      const err = await containerRes.json() as { error?: { message?: string } };
-      const msg = err?.error?.message ?? "Failed to create media container";
-      console.error(`[cron/publish] Container error for post ${post.id}:`, msg);
-      await markFailed(post.id, msg);
-      return { success: false };
-    }
+  // Instagram
+  if (post.client.igUserId && post.client.igAccessToken && post.imageUrl) {
+    platforms.push(publishInstagram(post, fullCaption));
+  }
 
-    const { id: creationId } = await containerRes.json() as { id: string };
+  // Facebook
+  if (post.client.fbPageId && post.client.fbPageToken) {
+    platforms.push(publishFacebook(post, fullCaption));
+  }
 
-    // Brief pause — Meta recommends waiting ~1s between container creation and publish
-    await new Promise((r) => setTimeout(r, 1500));
+  // LinkedIn
+  if (post.client.linkedInOrgId && post.client.linkedInToken) {
+    platforms.push(publishLinkedIn(post, fullCaption));
+  }
 
-    // Step 2: Publish the container
-    const publishRes = await fetch(`${IG_API}/${igUserId}/media_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: creationId,
-        access_token: igAccessToken,
-      }),
-    });
+  if (platforms.length === 0) {
+    await markFailed(post.id, "No connected platforms with credentials");
+    return { success: false };
+  }
 
-    if (!publishRes.ok) {
-      const err = await publishRes.json() as { error?: { message?: string } };
-      const msg = err?.error?.message ?? "Failed to publish media";
-      console.error(`[cron/publish] Publish error for post ${post.id}:`, msg);
-      await markFailed(post.id, msg);
-      return { success: false };
-    }
+  const results = await Promise.allSettled(platforms);
+  const outcomes = results.map((r) =>
+    r.status === "fulfilled" ? r.value : { platform: "unknown", ok: false, error: String(r.reason) }
+  );
 
-    const { id: igPostId } = await publishRes.json() as { id: string };
+  const anySuccess = outcomes.some((o) => o.ok);
+  const igResult = outcomes.find((o) => o.platform === "instagram");
+  const failedPlatforms = outcomes.filter((o) => !o.ok).map((o) => `${o.platform}: ${o.error}`);
 
+  if (anySuccess) {
     await prisma.post.update({
       where: { id: post.id },
       data: {
         status: "POSTED",
-        igPostId,
+        igPostId: igResult?.ok ? igResult.id : undefined,
         publishedAt: new Date(),
-        failureReason: null,
+        failureReason: failedPlatforms.length
+          ? `Partial: ${failedPlatforms.join(" | ")}`
+          : null,
       },
     });
-
-    console.log(`[cron/publish] ✓ Posted ${post.client.businessName} post ${post.id} → ig:${igPostId}`);
+    console.log(`[cron/publish] ✓ ${post.client.businessName} — ${outcomes.filter((o) => o.ok).map((o) => o.platform).join(", ")}`);
     return { success: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[cron/publish] Exception for post ${post.id}:`, msg);
-    await markFailed(post.id, msg);
+  } else {
+    const reason = failedPlatforms.join(" | ");
+    await markFailed(post.id, reason);
     return { success: false };
   }
 }
+
+// ─── Instagram ────────────────────────────────────────────────────────────────
+
+async function publishInstagram(post: PostWithClient, caption: string) {
+  const { igUserId, igAccessToken } = post.client;
+
+  try {
+    // Step 1: Create container
+    const containerRes = await fetch(`${IG_API}/${igUserId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: post.imageUrl, caption, access_token: igAccessToken }),
+    });
+
+    if (!containerRes.ok) {
+      const err = await containerRes.json() as { error?: { message?: string } };
+      return { platform: "instagram", ok: false, error: err?.error?.message ?? "Container creation failed" };
+    }
+
+    const { id: creationId } = await containerRes.json() as { id: string };
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // Step 2: Publish
+    const publishRes = await fetch(`${IG_API}/${igUserId}/media_publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creation_id: creationId, access_token: igAccessToken }),
+    });
+
+    if (!publishRes.ok) {
+      const err = await publishRes.json() as { error?: { message?: string } };
+      return { platform: "instagram", ok: false, error: err?.error?.message ?? "Publish failed" };
+    }
+
+    const { id: igPostId } = await publishRes.json() as { id: string };
+    return { platform: "instagram", ok: true, id: igPostId };
+  } catch (err) {
+    return { platform: "instagram", ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Facebook ────────────────────────────────────────────────────────────────
+
+async function publishFacebook(post: PostWithClient, caption: string) {
+  const { fbPageId, fbPageToken } = post.client;
+
+  try {
+    const endpoint = post.imageUrl
+      ? `${IG_API}/${fbPageId}/photos`
+      : `${IG_API}/${fbPageId}/feed`;
+
+    const body = post.imageUrl
+      ? { url: post.imageUrl, caption, access_token: fbPageToken }
+      : { message: caption, access_token: fbPageToken };
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      return { platform: "facebook", ok: false, error: err?.error?.message ?? "Facebook post failed" };
+    }
+
+    const { id } = await res.json() as { id: string };
+    return { platform: "facebook", ok: true, id };
+  } catch (err) {
+    return { platform: "facebook", ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── LinkedIn ─────────────────────────────────────────────────────────────────
+
+async function publishLinkedIn(post: PostWithClient, caption: string) {
+  const { linkedInOrgId, linkedInToken } = post.client;
+  const orgUrn = `urn:li:organization:${linkedInOrgId}`;
+  const headers = {
+    "Authorization": `Bearer ${linkedInToken}`,
+    "Content-Type": "application/json",
+    "X-Restli-Protocol-Version": "2.0.0",
+  };
+
+  try {
+    let mediaAssetUrn: string | null = null;
+
+    // If there's an image, upload it to LinkedIn first
+    if (post.imageUrl) {
+      // Step 1: Register the upload
+      const registerRes = await fetch(`${LI_API}/assets?action=registerUpload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          registerUploadRequest: {
+            recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+            owner: orgUrn,
+            serviceRelationships: [
+              { relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" },
+            ],
+          },
+        }),
+      });
+
+      if (!registerRes.ok) {
+        const err = await registerRes.json() as { message?: string };
+        return { platform: "linkedin", ok: false, error: `Upload registration failed: ${err?.message ?? registerRes.status}` };
+      }
+
+      const registerData = await registerRes.json() as {
+        value: { uploadMechanism: { "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest": { uploadUrl: string } }; asset: string };
+      };
+      const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+      mediaAssetUrn = registerData.value.asset;
+
+      // Step 2: Fetch the image and upload the binary to LinkedIn
+      const imgRes = await fetch(post.imageUrl);
+      if (!imgRes.ok) {
+        return { platform: "linkedin", ok: false, error: "Failed to fetch image for upload" };
+      }
+      const imgBuffer = await imgRes.arrayBuffer();
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${linkedInToken}` },
+        body: imgBuffer,
+      });
+
+      if (!uploadRes.ok) {
+        return { platform: "linkedin", ok: false, error: `Image upload failed: ${uploadRes.status}` };
+      }
+    }
+
+    // Step 3: Create the UGC post
+    const ugcBody = mediaAssetUrn
+      ? {
+          author: orgUrn,
+          lifecycleState: "PUBLISHED",
+          specificContent: {
+            "com.linkedin.ugc.ShareContent": {
+              shareCommentary: { text: caption },
+              shareMediaCategory: "IMAGE",
+              media: [{ status: "READY", media: mediaAssetUrn }],
+            },
+          },
+          visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+        }
+      : {
+          author: orgUrn,
+          lifecycleState: "PUBLISHED",
+          specificContent: {
+            "com.linkedin.ugc.ShareContent": {
+              shareCommentary: { text: caption },
+              shareMediaCategory: "NONE",
+            },
+          },
+          visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+        };
+
+    const postRes = await fetch(`${LI_API}/ugcPosts`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(ugcBody),
+    });
+
+    if (!postRes.ok) {
+      const err = await postRes.json() as { message?: string };
+      return { platform: "linkedin", ok: false, error: err?.message ?? `LinkedIn post failed: ${postRes.status}` };
+    }
+
+    const liPostId = postRes.headers.get("x-restli-id") ?? "posted";
+    return { platform: "linkedin", ok: true, id: liPostId };
+  } catch (err) {
+    return { platform: "linkedin", ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function markFailed(postId: string, reason: string): Promise<void> {
   await prisma.post.update({
