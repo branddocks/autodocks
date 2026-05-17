@@ -94,16 +94,15 @@ export function ControlShell({
             {isDark ? "Light mode" : "Dark mode"}
           </button>
 
-          {/* Back to app */}
-          {!isSubdomain && (
-            <Link
-              href="/dashboard"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${hover}`}
-            >
-              <ExternalLink className="w-4 h-4 flex-shrink-0" />
-              Back to App
-            </Link>
-          )}
+          {/* Back to app — /dashboard redirects admin back to /control,
+              so link to /clients which the middleware doesn't intercept */}
+          <Link
+            href="/clients"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${hover}`}
+          >
+            <ExternalLink className="w-4 h-4 flex-shrink-0" />
+            Back to App
+          </Link>
 
           {/* User card */}
           <div className={`px-3 py-3 rounded-xl ${footerBg} mt-1`}>
