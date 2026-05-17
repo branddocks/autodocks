@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Plus,
   Clock,
+  BarChart2,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/clients", icon: Users, label: "Clients" },
   { href: "/calendar", icon: Calendar, label: "Calendar" },
   { href: "/queue", icon: ListChecks, label: "Review Queue" },
+  { href: "/analytics", icon: BarChart2, label: "Analytics" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
