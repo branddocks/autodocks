@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   X,
   CheckCircle2,
@@ -18,6 +18,8 @@ import {
   Sparkles,
   RefreshCw,
   Upload,
+  Wand2,
+  Calendar,
 } from "lucide-react";
 
 export interface GeneratedPostData {
@@ -119,6 +121,23 @@ export function CalendarGrid({
   // Image generation state
   const [imageGenLoading, setImageGenLoading] = useState<Record<string, boolean>>({});
   const [imageGenError, setImageGenError] = useState<Record<string, string>>({});
+
+  // Caption regeneration state
+  const [captionRegenLoading, setCaptionRegenLoading] = useState<Record<string, boolean>>({});
+  const [captionRegenError, setCaptionRegenError] = useState<Record<string, string>>({});
+
+  // File upload state
+  const [fileUploadLoading, setFileUploadLoading] = useState<Record<string, boolean>>({});
+  const [fileUploadError, setFileUploadError] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reschedule state
+  const [scheduleEdit, setScheduleEdit] = useState(false);
+  const [scheduleValue, setScheduleValue] = useState("");
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduledAts, setScheduledAts] = useState<Record<string, string | null>>(
+    Object.fromEntries(posts.map((p) => [p.id, p.scheduledAt]))
+  );
 
   // Publish state
   const [publishLoading, setPublishLoading] = useState(false);
@@ -254,6 +273,66 @@ export function CalendarGrid({
     }
   };
 
+  const handleRegenCaption = async (postId: string) => {
+    setCaptionRegenLoading((prev) => ({ ...prev, [postId]: true }));
+    setCaptionRegenError((prev) => ({ ...prev, [postId]: "" }));
+    try {
+      const res = await fetch(`/api/posts/${postId}/regenerate-caption`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setCaptionRegenError((prev) => ({ ...prev, [postId]: data.error ?? "Regeneration failed." }));
+        return;
+      }
+      setSavedData((prev) => ({
+        ...prev,
+        [postId]: { caption: data.caption, hashtags: prev[postId]?.hashtags ?? [] },
+      }));
+      setSelectedPost((p) => p ? { ...p, caption: data.caption } : null);
+    } finally {
+      setCaptionRegenLoading((prev) => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  const handleFileUpload = async (postId: string, file: File) => {
+    setFileUploadLoading((prev) => ({ ...prev, [postId]: true }));
+    setFileUploadError((prev) => ({ ...prev, [postId]: "" }));
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/posts/${postId}/upload-image`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFileUploadError((prev) => ({ ...prev, [postId]: data.error ?? "Upload failed." }));
+        return;
+      }
+      setImageUrls((prev) => ({ ...prev, [postId]: data.imageUrl }));
+      setSelectedPost((p) => p ? { ...p, imageUrl: data.imageUrl } : null);
+    } finally {
+      setFileUploadLoading((prev) => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  const saveSchedule = async (postId: string) => {
+    if (!scheduleValue) return;
+    setScheduleSaving(true);
+    try {
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: new Date(scheduleValue).toISOString() }),
+      });
+      if (res.ok) {
+        setScheduledAts((prev) => ({ ...prev, [postId]: scheduleValue }));
+        setScheduleEdit(false);
+      }
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
   return (
     <div>
       {/* Legend */}
@@ -376,6 +455,21 @@ export function CalendarGrid({
         </span>
       </div>
 
+      {/* Hidden file input for custom image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && selectedPost) {
+            handleFileUpload(selectedPost.id, file);
+          }
+          e.target.value = "";
+        }}
+      />
+
       {/* Post modal */}
       {selectedPost && (
         <div
@@ -448,12 +542,26 @@ export function CalendarGrid({
                     Caption
                   </p>
                   {!editMode && (
-                    <button
-                      onClick={() => openEdit(selectedPost)}
-                      className="flex items-center gap-1 text-xs text-brand hover:text-brand-deep font-medium transition-colors"
-                    >
-                      <Pencil className="w-3 h-3" /> Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleRegenCaption(selectedPost.id)}
+                        disabled={!!captionRegenLoading[selectedPost.id]}
+                        className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium transition-colors disabled:opacity-50"
+                      >
+                        {captionRegenLoading[selectedPost.id] ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-3 h-3" />
+                        )}
+                        {captionRegenLoading[selectedPost.id] ? "Rewriting…" : "Rewrite"}
+                      </button>
+                      <button
+                        onClick={() => openEdit(selectedPost)}
+                        className="flex items-center gap-1 text-xs text-brand hover:text-brand-deep font-medium transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                    </div>
                   )}
                 </div>
                 {editMode ? (
@@ -464,9 +572,16 @@ export function CalendarGrid({
                     className="w-full text-sm leading-relaxed bg-surface-warm rounded-xl p-3 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
                   />
                 ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap bg-surface-warm rounded-xl p-3 border border-border-strong">
-                    {savedData[selectedPost.id]?.caption ?? selectedPost.caption}
-                  </p>
+                  <>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap bg-surface-warm rounded-xl p-3 border border-border-strong">
+                      {savedData[selectedPost.id]?.caption ?? selectedPost.caption}
+                    </p>
+                    {captionRegenError[selectedPost.id] && (
+                      <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                        {captionRegenError[selectedPost.id]}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -521,7 +636,7 @@ export function CalendarGrid({
                   </p>
                 )}
 
-                {/* Generate + Upload URL buttons */}
+                {/* Generate + Upload File + URL buttons */}
                 {!showImageInput && (
                   <div className="flex gap-2">
                     <button
@@ -543,14 +658,25 @@ export function CalendarGrid({
                         : "Generate Image"}
                     </button>
                     <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={!!fileUploadLoading[selectedPost.id]}
+                      className="flex items-center gap-1.5 text-xs border border-border-strong text-muted hover:bg-surface-warm rounded-xl px-3 py-2 transition-colors disabled:opacity-50"
+                    >
+                      {fileUploadLoading[selectedPost.id] ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      {fileUploadLoading[selectedPost.id] ? "Uploading…" : "Upload"}
+                    </button>
+                    <button
                       onClick={() => {
                         setImageInputVal(imageUrls[selectedPost.id] || selectedPost.imageUrl || "");
                         setShowImageInput(true);
                       }}
-                      className="flex items-center gap-1.5 text-xs border border-border-strong text-muted hover:bg-surface-warm rounded-xl px-3 py-2 transition-colors"
+                      className="flex items-center gap-1.5 text-xs border border-border-strong text-muted hover:bg-surface-warm rounded-xl px-3 py-2 transition-colors text-[10px]"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      Upload URL
+                      URL
                     </button>
                   </div>
                 )}
@@ -583,10 +709,15 @@ export function CalendarGrid({
                   </div>
                 )}
 
-                {/* Gen error */}
+                {/* Gen / upload errors */}
                 {imageGenError[selectedPost.id] && (
                   <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                     {imageGenError[selectedPost.id]}
+                  </p>
+                )}
+                {fileUploadError[selectedPost.id] && (
+                  <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    {fileUploadError[selectedPost.id]}
                   </p>
                 )}
               </div>
@@ -598,6 +729,75 @@ export function CalendarGrid({
                   Best time to post: <span className="font-medium text-foreground">{selectedPost.bestTime}</span>
                 </div>
               )}
+
+              {/* Reschedule */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-muted uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> Schedule
+                  </p>
+                  {!scheduleEdit && (
+                    <button
+                      onClick={() => {
+                        const existing = scheduledAts[selectedPost.id];
+                        setScheduleValue(
+                          existing
+                            ? new Date(existing).toISOString().slice(0, 16)
+                            : ""
+                        );
+                        setScheduleEdit(true);
+                      }}
+                      className="text-xs text-brand hover:text-brand-deep font-medium transition-colors"
+                    >
+                      {scheduledAts[selectedPost.id] ? "Reschedule" : "Set time"}
+                    </button>
+                  )}
+                </div>
+                {scheduledAts[selectedPost.id] && !scheduleEdit && (
+                  <p className="text-sm text-foreground">
+                    {new Date(scheduledAts[selectedPost.id]!).toLocaleString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                )}
+                {!scheduledAts[selectedPost.id] && !scheduleEdit && (
+                  <p className="text-xs text-muted italic">Not scheduled yet</p>
+                )}
+                {scheduleEdit && (
+                  <div className="space-y-2">
+                    <input
+                      type="datetime-local"
+                      value={scheduleValue}
+                      onChange={(e) => setScheduleValue(e.target.value)}
+                      className="w-full text-sm bg-surface-warm rounded-xl px-3 py-2.5 border border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setScheduleEdit(false)}
+                        disabled={scheduleSaving}
+                        className="flex-1 text-sm border border-border-strong rounded-xl py-2 text-muted hover:bg-surface-warm transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => saveSchedule(selectedPost.id)}
+                        disabled={scheduleSaving || !scheduleValue}
+                        className="flex-1 text-sm bg-brand text-white rounded-xl py-2 font-semibold hover:bg-brand-deep transition-colors disabled:opacity-50"
+                      >
+                        {scheduleSaving ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
+                        ) : (
+                          "Save"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Actions */}
